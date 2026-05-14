@@ -89,6 +89,55 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # ---------------------------------------------------------------------------
+# Redis Cache
+# ---------------------------------------------------------------------------
+_redis_url = config('REDIS_URL', default='redis://localhost:6379/0')
+_redis_ssl = config('REDIS_SSL', default=False, cast=bool)
+
+_redis_client_kwargs = {
+    'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+    'CONNECTION_POOL_CLASS': 'redis.BlockingConnectionPool',
+    'CONNECTION_POOL_KWARGS': {
+        'max_connections': 50,
+        'timeout': 20,
+    },
+    'PICKLE_VERSION': -1,
+    'SOCKET_CONNECT_TIMEOUT': 5,
+    'SOCKET_TIMEOUT': 5,
+    'RETRY_ON_TIMEOUT': True,
+    'COMPRESSOR': 'django_redis.compressors.zlib.ZlibCompressor',
+    'IGNORE_EXCEPTIONS': True,
+}
+
+if _redis_ssl:
+    _redis_client_kwargs['CONNECTION_POOL_KWARGS'].setdefault('ssl_cert_reqs', None)
+    _redis_url = _redis_url.replace('redis://', 'rediss://', 1)
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': _redis_url,
+        'OPTIONS': _redis_client_kwargs,
+        'KEY_PREFIX': config('REDIS_KEY_PREFIX', default='myapp'),
+        'TIMEOUT': 300,
+    },
+    'sessions': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': config('REDIS_SESSION_URL', default=_redis_url),
+        'OPTIONS': _redis_client_kwargs,
+        'KEY_PREFIX': config('REDIS_SESSION_KEY_PREFIX', default='myapp_sessions'),
+        'TIMEOUT': None,
+    },
+}
+
+SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
+SESSION_CACHE_ALIAS = 'sessions'
+
+DJANGO_REDIS_IGNORE_EXCEPTIONS = True
+DJANGO_REDIS_LOG_IGNORED_EXCEPTIONS = True
+DJANGO_REDIS_LOGGER = 'django_redis'
+
+# ---------------------------------------------------------------------------
 # CORS
 # ---------------------------------------------------------------------------
 CORS_ALLOWED_ORIGINS = config(

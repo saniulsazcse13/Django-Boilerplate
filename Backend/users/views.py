@@ -5,6 +5,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 from django.contrib.auth.models import User
+from django.conf import settings
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from drf_spectacular.utils import extend_schema, OpenApiResponse
@@ -13,11 +14,32 @@ from users.models import UserProfile
 from users.serializers import (
     GoogleAuthSerializer,
     TokenResponseSerializer,
-    RefreshTokenSerializer,
-    LogoutSerializer,
     UserProfileSerializer,
 )
 from users.authentication import GoogleAuthService
+
+
+REFRESH_TOKEN_COOKIE_NAME = 'refresh_token'
+
+
+def _set_refresh_token_cookie(response, refresh_token):
+    max_age = int(settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].total_seconds())
+    response.set_cookie(
+        key=REFRESH_TOKEN_COOKIE_NAME,
+        value=refresh_token,
+        max_age=max_age,
+        httponly=True,
+        secure=not settings.DEBUG,
+        samesite='Lax',
+        path='/api/',
+    )
+
+
+def _clear_refresh_token_cookie(response):
+    response.delete_cookie(
+        key=REFRESH_TOKEN_COOKIE_NAME,
+        path='/api/',
+    )
 
 
 def _get_tokens_for_user(user):
@@ -99,14 +121,15 @@ class GoogleLoginView(APIView):
         profile = _build_user_profile(user)
         profile_serializer = UserProfileSerializer(profile)
 
-        return Response(
+        response = Response(
             {
                 'access': tokens['access'],
-                'refresh': tokens['refresh'],
                 'user': profile_serializer.data,
             },
             status=status.HTTP_200_OK,
         )
+        _set_refresh_token_cookie(response, tokens['refresh'])
+        return response
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -115,7 +138,6 @@ class TokenRefreshView(APIView):
     authentication_classes = []
 
     @extend_schema(
-        request=RefreshTokenSerializer,
         responses={
             200: OpenApiResponse(description='Token refreshed successfully'),
             401: OpenApiResponse(description='Invalid or expired refresh token'),
@@ -123,28 +145,42 @@ class TokenRefreshView(APIView):
         tags=['Authentication'],
     )
     def post(self, request):
-        serializer = RefreshTokenSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        refresh_token_str = request.COOKIES.get(REFRESH_TOKEN_COOKIE_NAME)
+        if not refresh_token_str:
+            return Response(
+                {'error': 'Refresh token not provided'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
 
         try:
-            refresh = RefreshToken(serializer.validated_data['refresh'])
+            refresh = RefreshToken(refresh_token_str)
             access = str(refresh.access_token)
-            return Response(
-                {'access': access},
-                status=status.HTTP_200_OK,
-            )
+
+            try:
+                refresh.blacklist()
+            except AttributeError:
+                pass
+            refresh.set_jti()
+            refresh.set_exp()
+            refresh.set_iat()
+            new_refresh = str(refresh)
+
+            response = Response({'access': access})
+            _set_refresh_token_cookie(response, new_refresh)
+            return response
         except TokenError:
-            return Response(
+            response = Response(
                 {'error': 'Invalid or expired refresh token'},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
+            _clear_refresh_token_cookie(response)
+            return response
 
 
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
-        request=LogoutSerializer,
         responses={
             200: OpenApiResponse(description='Logged out successfully'),
             400: OpenApiResponse(description='Bad request'),
@@ -152,26 +188,24 @@ class LogoutView(APIView):
         tags=['Authentication'],
     )
     def post(self, request):
-        serializer = LogoutSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        refresh_token_str = request.COOKIES.get(REFRESH_TOKEN_COOKIE_NAME)
 
-        try:
-            refresh = RefreshToken(serializer.validated_data['refresh'])
-            refresh.blacklist()
-            return Response(
-                {'message': 'Logged out successfully'},
-                status=status.HTTP_200_OK,
-            )
-        except TokenError:
-            return Response(
-                {'error': 'Invalid or expired refresh token'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        except AttributeError:
-            return Response(
-                {'message': 'Logged out successfully'},
-                status=status.HTTP_200_OK,
-            )
+        response = Response(
+            {'message': 'Logged out successfully'},
+            status=status.HTTP_200_OK,
+        )
+        _clear_refresh_token_cookie(response)
+
+        if refresh_token_str:
+            try:
+                refresh = RefreshToken(refresh_token_str)
+                refresh.blacklist()
+            except TokenError:
+                pass
+            except AttributeError:
+                pass
+
+        return response
 
 
 class UserProfileView(APIView):

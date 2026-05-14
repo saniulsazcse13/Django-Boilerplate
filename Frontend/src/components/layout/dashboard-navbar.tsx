@@ -11,7 +11,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useAuth } from "@/providers/auth-provider"
-import { useAuthStore } from "@/store/auth-store"
 import { logout } from "@/lib/auth"
 import { getInitials } from "@/lib/utils"
 import { Bell, LogOut, Menu, User, Settings, Shield } from "lucide-react"
@@ -24,16 +23,11 @@ interface DashboardNavbarProps {
 
 export function DashboardNavbar({ onMenuClick }: DashboardNavbarProps) {
   const { user } = useAuth()
-  const refreshToken = useAuthStore((s) => s.refreshToken)
   const pathname = usePathname()
   const isAdmin = pathname.startsWith("/admin")
 
   const handleLogout = async () => {
-    if (refreshToken) {
-      await logout(refreshToken)
-    } else {
-      useAuthStore.getState().logout()
-    }
+    await logout()
   }
 
   return (

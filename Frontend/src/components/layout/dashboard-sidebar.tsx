@@ -13,7 +13,6 @@ import {
   ChevronLeft,
   LogOut,
 } from "lucide-react"
-import { useAuthStore } from "@/store/auth-store"
 import { logout } from "@/lib/auth"
 import { useState } from "react"
 
@@ -27,14 +26,9 @@ const sidebarLinks = [
 export function DashboardSidebar() {
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(false)
-  const refreshToken = useAuthStore((s) => s.refreshToken)
 
   const handleLogout = async () => {
-    if (refreshToken) {
-      await logout(refreshToken)
-    } else {
-      useAuthStore.getState().logout()
-    }
+    await logout()
   }
 
   return (

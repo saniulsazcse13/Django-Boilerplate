@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
 import { useAuthStore } from "@/store/auth-store"
-import { getProfile } from "@/lib/auth"
+import { getProfile, silentRefresh } from "@/lib/auth"
 
 interface AuthContextType {
   isLoading: boolean
@@ -15,7 +15,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
-  const { isAuthenticated, user, setUser } = useAuthStore()
+  const { isAuthenticated, user, setUser, accessToken } = useAuthStore()
 
   const refreshUser = async () => {
     try {
@@ -27,11 +27,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    if (isAuthenticated) {
-      refreshUser().finally(() => setIsLoading(false))
-    } else {
+    const init = async () => {
+      localStorage.removeItem("auth-storage")
+      if (accessToken) {
+        await refreshUser()
+      } else {
+        const newAccess = await silentRefresh()
+        if (newAccess) {
+          await refreshUser()
+        }
+      }
       setIsLoading(false)
     }
+    init()
   }, [])
 
   return (

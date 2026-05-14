@@ -6,6 +6,7 @@ const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL,
   headers: { "Content-Type": "application/json" },
   timeout: 15000,
+  withCredentials: true,
 })
 
 api.interceptors.request.use(
@@ -56,17 +57,11 @@ api.interceptors.response.use(
       originalRequest._retry = true
       isRefreshing = true
 
-      const refreshToken = useAuthStore.getState().refreshToken
-      if (!refreshToken) {
-        useAuthStore.getState().logout()
-        isRefreshing = false
-        return Promise.reject(error)
-      }
-
       try {
         const response = await axios.post(
           `${process.env.NEXT_PUBLIC_API_URL}/token/refresh/`,
-          { refresh: refreshToken }
+          {},
+          { withCredentials: true }
         )
         const { access } = response.data
         useAuthStore.getState().setAccessToken(access)

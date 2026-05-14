@@ -23,13 +23,4 @@ class GoogleAuthSerializer(serializers.Serializer):
 
 class TokenResponseSerializer(serializers.Serializer):
     access = serializers.CharField()
-    refresh = serializers.CharField()
     user = UserProfileSerializer()
-
-
-class RefreshTokenSerializer(serializers.Serializer):
-    refresh = serializers.CharField(required=True)
-
-
-class LogoutSerializer(serializers.Serializer):
-    refresh = serializers.CharField(required=True)

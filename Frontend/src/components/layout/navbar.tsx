@@ -16,7 +16,6 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useAuth } from "@/providers/auth-provider"
 import { logout } from "@/lib/auth"
-import { useAuthStore } from "@/store/auth-store"
 import { getInitials } from "@/lib/utils"
 import { Menu, X, LayoutDashboard, LogOut, User, ChevronDown, Shield } from "lucide-react"
 
@@ -33,14 +32,9 @@ export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const pathname = usePathname()
   const { isAuthenticated, user, isLoading } = useAuth()
-  const refreshToken = useAuthStore((s) => s.refreshToken)
 
   const handleLogout = async () => {
-    if (refreshToken) {
-      await logout(refreshToken)
-    } else {
-      useAuthStore.getState().logout()
-    }
+    await logout()
   }
 
   return (
